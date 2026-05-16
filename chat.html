@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Heycord Chat</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #11121a;
+      --panel: #1a1c2b;
+      --text: #ededff;
+      --muted: #9aa2c3;
+      --accent: #6d9cff;
+      --danger: #ff6f6f;
+      --border: rgba(255, 255, 255, 0.08);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Inter, system-ui, sans-serif;
+      background: radial-gradient(circle at top left, #252a48, #0d101c 45%);
+      color: var(--text);
+    }
+    button, input { font: inherit; }
+    .page-chat {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 40px;
+      display: grid;
+      gap: 24px;
+    }
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+    }
+    .topbar h2 { margin: 0; font-size: 1.45rem; }
+    .topbar button {
+      border: none;
+      border-radius: 14px;
+      padding: 14px 20px;
+      background: linear-gradient(135deg, #5c88ff, #3d6bff);
+      color: white;
+      cursor: pointer;
+    }
+    .topbar button:hover { filter: brightness(1.08); }
+    .chat-layout {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      gap: 24px;
+    }
+    .people-panel,
+    .chat-panel {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 32px;
+      backdrop-filter: blur(18px);
+    }
+    .people-panel h3 { margin: 0 0 20px; font-size: 1.1rem; }
+    .user-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: grid;
+      gap: 12px;
+    }
+    .user-list li {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.05);
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+    .user-list li:hover { background: rgba(109, 156, 255, 0.14); }
+    .status-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+    }
+    .status-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.95rem;
+      color: var(--muted);
+    }
+    .chat-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+    .chat-header h3 { margin: 0; font-size: 1.3rem; }
+    .messages {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 22px;
+      overflow-y: auto;
+      min-height: 360px;
+      display: grid;
+      gap: 14px;
+    }
+    .message {
+      max-width: 75%;
+      padding: 14px 18px;
+      border-radius: 20px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+    }
+    .message.user {
+      margin-left: auto;
+      background: rgba(109, 156, 255, 0.2);
+      color: #eef4ff;
+    }
+    .message.partner {
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text);
+    }
+    #chat-form {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      align-items: center;
+      margin-top: 12px;
+    }
+    #chat-form input {
+      width: 100%;
+      padding: 14px 16px;
+      border-radius: 14px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text);
+    }
+    #chat-form button {
+      border: none;
+      border-radius: 14px;
+      padding: 14px 20px;
+      background: linear-gradient(135deg, #5c88ff, #3d6bff);
+      color: white;
+      cursor: pointer;
+    }
+    #chat-form button:hover { filter: brightness(1.08); }
+    .empty-state { color: var(--muted); }
+    @media (max-width: 980px) { .chat-layout { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <section class="page-chat">
+    <div class="topbar">
+      <h2 id="welcome-user">Ciao</h2>
+      <button id="btn-logout">Log out</button>
+    </div>
+    <div class="chat-layout">
+      <div class="people-panel">
+        <h3>Persone che hanno fatto il sign up</h3>
+        <ul class="user-list" id="user-list"></ul>
+      </div>
+      <div class="chat-panel">
+        <div class="chat-header">
+          <h3 id="chat-title">Seleziona una persona per iniziare a chattare</h3>
+        </div>
+        <div class="messages" id="messages">
+          <div class="message partner empty-state">Scegli un utente a sinistra per aprire la chat.</div>
+        </div>
+        <form id="chat-form">
+          <input id="message-input" type="text" placeholder="Scrivi un messaggio..." autocomplete="off" disabled>
+          <button type="submit" disabled>Invia</button>
+        </form>
+      </div>
+    </div>
+  </section>
+  <script>
+    const USERS_KEY = 'heycordUsers';
+    const CURRENT_USER_KEY = 'heycordCurrentUser';
+    const CHAT_HISTORY_KEY = 'heycordChatHistory';
+    const welcomeUser = document.getElementById('welcome-user');
+    const userList = document.getElementById('user-list');
+    const chatTitle = document.getElementById('chat-title');
+    const messages = document.getElementById('messages');
+    const messageInput = document.getElementById('message-input');
+    const chatForm = document.getElementById('chat-form');
+    const logoutBtn = document.getElementById('btn-logout');
+
+    let registeredUsers = [];
+    let currentUser = null;
+    let currentChatUser = null;
+    let chatHistory = {};
+
+    function redirectToStart() {
+      window.location.href = 'singhup.html';
+    }
+
+    const PLACEHOLDER_EMAILS = ['marta@example.com', 'luca@example.com', 'sara@example.com'];
+
+    function loadUsers() {
+      const saved = localStorage.getItem(USERS_KEY);
+      try {
+        const users = saved ? JSON.parse(saved) : [];
+        if (!Array.isArray(users) || users.length === 0) {
+          redirectToStart();
+          return [];
+        }
+        const filtered = users.filter(user => !PLACEHOLDER_EMAILS.includes(user.email));
+        if (filtered.length !== users.length) {
+          localStorage.setItem(USERS_KEY, JSON.stringify(filtered));
+        }
+        if (filtered.length === 0) {
+          redirectToStart();
+          return [];
+        }
+        return filtered.map(user => ({
+          ...user,
+          online: typeof user.online === 'boolean' ? user.online : Math.random() > 0.5
+        }));
+      } catch {
+        redirectToStart();
+        return [];
+      }
+    }
+
+    function loadCurrentUser() {
+      const raw = localStorage.getItem(CURRENT_USER_KEY);
+      if (!raw) return null;
+      try { return JSON.parse(raw); } catch { return null; }
+    }
+
+    function isPlaceholderUser(user) {
+      return user && PLACEHOLDER_EMAILS.includes(user.email);
+    }
+
+    function loadChatHistory() {
+      const raw = localStorage.getItem(CHAT_HISTORY_KEY);
+      try {
+        const history = raw ? JSON.parse(raw) : {};
+        return typeof history === 'object' && history !== null ? history : {};
+      } catch { return {}; }
+    }
+
+    function saveChatHistory() {
+      localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(chatHistory));
+    }
+
+    function getChatKey() {
+      if (!currentUser || !currentChatUser) return null;
+      return [currentUser.email, currentChatUser.email].sort().join('::');
+    }
+
+    function renderUserList() {
+      userList.innerHTML = '';
+      const contacts = registeredUsers.filter(user => user.email !== currentUser.email);
+      if (contacts.length === 0) {
+        const empty = document.createElement('li');
+        empty.textContent = 'Non c\'è nessuno.';
+        empty.className = 'empty-state';
+        userList.appendChild(empty);
+        return;
+      }
+      contacts.forEach(user => {
+        const item = document.createElement('li');
+        const info = document.createElement('div');
+        info.style.display = 'flex';
+        info.style.alignItems = 'center';
+
+        const dot = document.createElement('span');
+        dot.className = 'status-dot';
+        dot.style.backgroundColor = user.online ? '#4aed4a' : '#000000';
+        dot.title = user.online ? 'Online' : 'Offline';
+
+        const label = document.createElement('span');
+        label.className = 'status-label';
+        label.textContent = `${user.name} ${user.online ? 'Online' : 'Offline'}`;
+
+        info.appendChild(dot);
+        info.appendChild(label);
+
+        const badge = document.createElement('span');
+        badge.textContent = 'Chat';
+        badge.style.opacity = '0.8';
+        badge.style.fontSize = '0.9rem';
+
+        item.appendChild(info);
+        item.appendChild(badge);
+        item.addEventListener('click', () => selectChatUser(user));
+        userList.appendChild(item);
+      });
+    }
+
+    function selectChatUser(user) {
+      currentChatUser = user;
+      chatTitle.textContent = `Chat con ${user.name}`;
+      messageInput.disabled = false;
+      chatForm.querySelector('button').disabled = false;
+      displayMessages();
+      messageInput.focus();
+    }
+
+    function displayMessages() {
+      const key = getChatKey();
+      const history = key ? chatHistory[key] || [] : [];
+      messages.innerHTML = '';
+      if (!history.length) {
+        const placeholder = document.createElement('div');
+        placeholder.className = 'message partner empty-state';
+        placeholder.textContent = `Inizia a scrivere a ${currentChatUser.name}.`;
+        messages.appendChild(placeholder);
+        return;
+      }
+      history.forEach(item => {
+        const block = document.createElement('div');
+        block.className = `message ${item.sender === 'me' ? 'user' : 'partner'}`;
+        block.textContent = item.text;
+        messages.appendChild(block);
+      });
+      messages.scrollTop = messages.scrollHeight;
+    }
+
+    logoutBtn.addEventListener('click', () => {
+      localStorage.removeItem(CURRENT_USER_KEY);
+      redirectToStart();
+    });
+
+    chatForm.addEventListener('submit', event => {
+      event.preventDefault();
+      if (!currentChatUser) return;
+      const text = messageInput.value.trim();
+      if (!text) return;
+      const key = getChatKey();
+      if (!chatHistory[key]) chatHistory[key] = [];
+      chatHistory[key].push({ sender: 'me', text });
+      chatHistory[key].push({ sender: 'partner', text: `Risposta di ${currentChatUser.name}: grazie per il messaggio!` });
+      saveChatHistory();
+      messageInput.value = '';
+      displayMessages();
+    });
+
+    function init() {
+      currentUser = loadCurrentUser();
+      if (!currentUser || isPlaceholderUser(currentUser)) {
+        localStorage.removeItem(CURRENT_USER_KEY);
+        redirectToStart();
+        return;
+      }
+      registeredUsers = loadUsers();
+      if (!registeredUsers.length || !registeredUsers.some(user => user.email === currentUser.email)) {
+        localStorage.removeItem(CURRENT_USER_KEY);
+        redirectToStart();
+        return;
+      }
+      chatHistory = loadChatHistory();
+      welcomeUser.textContent = `Ciao, ${currentUser.name}`;
+      renderUserList();
+    }
+
+    init();
+  </script>
+</body>
+</html>
